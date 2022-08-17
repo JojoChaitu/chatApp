@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Socket</title>
+</head>
+<body>
+    <div id="heading" style="display: none;"></div>
+
+    <div id="after-login" style="display: none;">
+
+        <div id="joined-users"></div>
+    </div>
+
+    <ul id="messages"></ul>
+    <div id="login-form">
+        <!-- <label>name</label> -->
+        <input type="text" id="username" autocomplete="off" />
+        <!-- <label>email</label>
+        <input type="email" id="email" autocomplete="off" />
+        <label>password</label>
+        <input type="password" id="password" autocomplete="off" /> -->
+        <button onclick="register()">Enter Chat</button>
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io()
+
+        let form = document.getElementById('form')
+        let input = document.getElementById('input')
+        let messages = document.getElementById('messages')
+        let name = document.getElementById('username')
+        let loginForm = document.getElementById('login-form')
+        let joinedUsers = document.getElementById('joined-users')
+
+        console.log(localStorage.getItem('jwt'));
+
+        function register(){
+
+            let username = $('#username').val();
+            let email = $('#email').val();
+            let password = $('#password').val();
+            
+            // axios.post("http://localhost:3000/user/signup",{ username: username, email: email, password: password },{withCredentials:true} )
+            //     .then((res) => {console.log(res)})
+            //     .catch((err) => console.log(err))
+
+            let heading = $('#username').val()
+            loginForm.style.display = 'none';
+            $('#heading').append(` <h1>Hello ${heading} <hr> </h1>`)
+            document.getElementById('heading').style.display = 'block';
+            document.getElementById('after-login').style.display = 'block'
+            let data = { name: name.value, userId: parseInt(Date.now()) }
+            sessionStorage.setItem("user", JSON.stringify(data))
+            socket.emit('loggedIn', data)
+
+        }
+        const sendMyMessage = (chatWidowId, fromUser, message) => {
+            let loggedInUser = JSON.parse(sessionStorage.getItem('user'))
+            let meClass = loggedInUser.userId == fromUser.userId ? 'me' : '';
+            $('#after-login').find(`#${chatWidowId} .body`).append(`
+            <div class="chat-text me">
+                <div>
+                    <span class="message"><h3 class="senderName">${fromUser.name}:</h3>${message}<span>
+                </div>
+            </div>
+        `);
+        }
+        const sendMessage = (room) => {
+            let loggedInUser = JSON.parse(sessionStorage.getItem('user'))
+            let message = $('#'+room).find('.messageText').val();
+            $('#'+room).find('.messageText').val('');
+            socket.emit('message', {room: room, message:message, from: loggedInUser});
+            sendMyMessage(room, loggedInUser, message)
+        }
+        const openChatWindow = (room) => {
+            if ($(`#${room}`).length === 0) {
+                $('#after-login').append(`
+            <div class="chat-window" id="${room}">
+                <div class="body"></div>
+                <div id="sendBox">
+                    <input type="text" class="messageText" />
+                    <button  onclick="sendMessage('${room}')">Go</button>
+                </div>
+             </div>
+            `)
+            }
+        }
+        const createRoom = (id) => {
+            let loggedInUser = JSON.parse(sessionStorage.getItem('user'));
+            let room = Date.now() + Math.random();
+            room = room.toString().replace(".", "_");
+            socket.emit('create', { room: room, userId: loggedInUser.userId, withUserId: id });
+            openChatWindow(room);
+        }
+        socket.on('updateUserList', (userList) => {
+            let loggedInUser = JSON.parse(sessionStorage.getItem('user')); 
+            joinedUsers.innerHTML = '<ul></ul>'
+            userList.forEach(item => {
+            if (loggedInUser.userId != item.userId) {
+                    $("#joined-users ul").append(`<li data-id="${item.userId}" onclick="createRoom('${item.userId}')">${item.name}</li>`)
+                    }
+                });
+            });
+        socket.on('invite', function (data) {
+            socket.emit("joinRoom", data)
+        });
+        socket.on('message', function (msg) {
+
+            if (!$('#after-login').find(`#${msg.room}`).length) {
+                openChatWindow(msg.room)
+            }
+            sendMyMessage(msg.room, msg.from, msg.message)
+        });
+
+
+    </script>
+</body>
+</html>
